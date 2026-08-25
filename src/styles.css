@@ -1,0 +1,125 @@
+:root {
+  --ink: #1a1c21;
+  --muted: #626a78;
+  --paper: #f4f5f7;
+  --panel: #ffffff;
+  --rule: #dcdfe4;
+  --accent: #7a3ff2;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.app { display: flex; height: 100vh; }
+
+.panel {
+  width: 330px;
+  flex: none;
+  background: var(--panel);
+  border-right: 1px solid var(--rule);
+  padding: 1.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.panel h1 { font-size: 1.3rem; margin: 0; }
+.panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.5rem; }
+.tagline { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.alt { color: var(--muted); font-weight: normal; font-size: 0.85em; margin-left: 0.35em; }
+
+.panel label { display: block; font-size: 0.9rem; margin-bottom: 0.6rem; }
+.panel input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.rack-head { display: flex; justify-content: space-between; align-items: center; }
+.rack-controls { display: flex; gap: 0.3rem; align-items: center; }
+.rack-controls button, .add {
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 0.15rem 0.6rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.rack-controls button:hover, .add:hover { border-color: var(--accent); }
+
+.rack { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.swatch { position: relative; width: 58px; height: 66px; }
+.swatch .wear {
+  width: 100%; height: 100%;
+  padding: 0;
+  border: 2px solid var(--rule);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #fff;
+}
+.swatch.worn .wear, .swatch.none.worn { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.swatch .wear img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.swatch.none {
+  border: 2px dashed var(--rule);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.swatch .del {
+  position: absolute; top: -6px; right: -6px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+}
+.swatch:hover .del { display: block; }
+
+.panel footer { margin-top: auto; font-size: 0.8rem; color: var(--muted); }
+
+.stage { flex: 1; position: relative; min-width: 0; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15, 17, 22, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50;
+}
+.modal {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex; flex-direction: column; gap: 0.75rem;
+  max-width: calc(100vw - 2rem);
+}
+.modal h3 { margin: 0; }
+.modal .hint { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.modal canvas { border-radius: 8px; cursor: grab; max-width: 100%; touch-action: none; }
+.modal input[type="range"] { accent-color: var(--accent); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.modal-actions button {
+  font: inherit;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  cursor: pointer;
+}
+.modal-actions .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+@media (max-width: 760px) {
+  .app { flex-direction: column-reverse; height: auto; }
+  .panel { width: auto; border-right: 0; border-top: 1px solid var(--rule); }
+  .stage { height: 55vh; flex: none; }
+}
