@@ -15,6 +15,7 @@ export default function App() {
   const sceneRef = useRef(null);
 
   const [profile, setProfile] = useState({ heightCm: 175, weightKg: 75 });
+  const [face, setFace] = useState(null);
   const [items, setItems] = useState([]);
   const [outfit, setOutfit] = useState({ top: null, bottom: null, shoes: null });
   const [pendingCrop, setPendingCrop] = useState(null); // {file, type}
@@ -30,11 +31,12 @@ export default function App() {
     ro.observe(stageRef.current);
 
     (async () => {
-      const [savedProfile, savedOutfit, savedItems] = await Promise.all([
-        db.getKV('profile'), db.getKV('outfit'), db.listItems(),
+      const [savedProfile, savedOutfit, savedItems, savedFace] = await Promise.all([
+        db.getKV('profile'), db.getKV('outfit'), db.listItems(), db.getKV('face'),
       ]);
       if (savedProfile) setProfile(savedProfile);
       if (savedOutfit) setOutfit(savedOutfit);
+      if (savedFace) setFace(savedFace);
       setItems(savedItems ?? []);
       setLoaded(true);
     })();
@@ -64,6 +66,13 @@ export default function App() {
     db.setKV('outfit', outfit);
   }, [loaded, outfit, items]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // face photo follows its own state
+  useEffect(() => {
+    if (!loaded) return;
+    sceneRef.current.setFace(face);
+    db.setKV('face', face);
+  }, [loaded, face]);
+
   async function addItem(type, image) {
     const item = { id: crypto.randomUUID(), type, image, added: Date.now() };
     await db.putItem(item);
@@ -77,6 +86,10 @@ export default function App() {
     setItems((prev) => prev.filter((i) => i.id !== item.id));
     setOutfit((prev) => (prev[item.type] === item.id ? { ...prev, [item.type]: null } : prev));
   }
+
+  // sliders work in whole inches / pounds; the scene and storage stay metric
+  const heightIn = Math.round(profile.heightCm / 2.54);
+  const weightLb = Math.round(profile.weightKg * 2.20462);
 
   function cycle(type, dir) {
     const options = [null, ...items.filter((i) => i.type === type).map((i) => i.id)];
@@ -98,17 +111,37 @@ export default function App() {
         <section>
           <h2>Measurements</h2>
           <label>
-            Height: <strong>{profile.heightCm} cm</strong>
-            <span className="alt">({Math.floor(profile.heightCm / 30.48)}′{Math.round(profile.heightCm / 2.54 % 12)}″)</span>
-            <input type="range" min="130" max="210" value={profile.heightCm}
-                   onChange={(e) => setProfile((p) => ({ ...p, heightCm: Number(e.target.value) }))} />
+            Height: <strong>{Math.floor(heightIn / 12)}′{heightIn % 12}″</strong>
+            <span className="alt">({Math.round(profile.heightCm)} cm)</span>
+            <input type="range" min="51" max="83" value={heightIn}
+                   onChange={(e) => setProfile((p) => ({ ...p, heightCm: Number(e.target.value) * 2.54 }))} />
           </label>
           <label>
-            Weight: <strong>{profile.weightKg} kg</strong>
-            <span className="alt">({Math.round(profile.weightKg * 2.205)} lb)</span>
-            <input type="range" min="40" max="160" value={profile.weightKg}
-                   onChange={(e) => setProfile((p) => ({ ...p, weightKg: Number(e.target.value) }))} />
+            Weight: <strong>{weightLb} lb</strong>
+            <span className="alt">({Math.round(profile.weightKg)} kg)</span>
+            <input type="range" min="90" max="350" value={weightLb}
+                   onChange={(e) => setProfile((p) => ({ ...p, weightKg: Number(e.target.value) / 2.20462 }))} />
           </label>
+        </section>
+
+        <section>
+          <div className="rack-head">
+            <h2>Face</h2>
+            <div className="rack-controls">
+              {face && (
+                <button type="button" aria-label="Remove face photo"
+                        onClick={() => setFace(null)}>×</button>
+              )}
+              <label className="add">
+                {face ? 'Change' : '+ Add photo'}
+                <input type="file" accept="image/*" hidden
+                       onChange={(e) => {
+                         if (e.target.files?.[0]) setPendingCrop({ file: e.target.files[0], type: 'face' });
+                         e.target.value = '';
+                       }} />
+              </label>
+            </div>
+          </div>
         </section>
 
         {TYPES.map(({ key, label }) => {
@@ -165,7 +198,10 @@ export default function App() {
         <CropModal
           file={pendingCrop.file}
           type={pendingCrop.type}
-          onDone={(image) => addItem(pendingCrop.type, image)}
+          onDone={(image) => {
+            if (pendingCrop.type === 'face') { setFace(image); setPendingCrop(null); }
+            else addItem(pendingCrop.type, image);
+          }}
           onCancel={() => setPendingCrop(null)}
         />
       )}

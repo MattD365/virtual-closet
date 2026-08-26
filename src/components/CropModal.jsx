@@ -6,6 +6,7 @@ const FRAMES = {
   top: { w: 300, h: 340 },
   bottom: { w: 260, h: 360 },
   shoes: { w: 340, h: 220 },
+  face: { w: 260, h: 320 },
 };
 
 export default function CropModal({ file, type, onDone, onCancel }) {
@@ -88,10 +89,12 @@ export default function CropModal({ file, type, onDone, onCancel }) {
 
   if (!img) return null;
   return (
-    <div className="modal-backdrop" role="dialog" aria-label="Crop garment photo">
+    <div className="modal-backdrop" role="dialog" aria-label="Crop photo">
       <div className="modal">
-        <h3>Frame the garment</h3>
-        <p className="hint">Drag to position, zoom until the {type} fills the frame.</p>
+        <h3>{type === 'face' ? 'Frame your face' : 'Frame the garment'}</h3>
+        <p className="hint">
+          Drag to position, zoom until {type === 'face' ? 'your face fills' : `the ${type} fills`} the frame.
+        </p>
         <canvas
           ref={canvasRef}
           width={frame.w}
@@ -113,7 +116,9 @@ export default function CropModal({ file, type, onDone, onCancel }) {
         />
         <div className="modal-actions">
           <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary" onClick={save}>Add to closet</button>
+          <button type="button" className="primary" onClick={save}>
+            {type === 'face' ? 'Use photo' : 'Add to closet'}
+          </button>
         </div>
       </div>
     </div>

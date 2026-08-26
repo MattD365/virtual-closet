@@ -7,6 +7,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const BODY_COLOR = 0xd8d4cf;
 const BASE_H = 1.75; // canonical figure height in metres; all dims scale from it
+const ARM_ANGLE = 0.75; // A-pose: radians out from vertical, so sleeve length reads
 
 export class ClosetScene {
   constructor(canvas) {
@@ -93,49 +94,103 @@ export class ClosetScene {
   _buildFigure() {
     this.figure.clear();
     const { s, g } = this.params;
-    const mat = new THREE.MeshStandardMaterial({ color: BODY_COLOR, roughness: 0.65 });
-    const add = (geo, x, y, z) => {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x * s * g, y * s, z * s);
+    const gl = Math.pow(g, 0.6); // limbs thicken slower than the torso
+    const mat = new THREE.MeshStandardMaterial({ color: BODY_COLOR, roughness: 0.5 });
+
+    // smooth silhouettes: spline through control radii, spun into a lathe
+    const lathe = (pts, seg = 40) => new THREE.LatheGeometry(
+      new THREE.SplineCurve(pts.map(([r, y]) => new THREE.Vector2(r, y))).getPoints(48),
+      seg,
+    );
+    const add = (geo, x, y, z, material = mat) => {
+      const m = new THREE.Mesh(geo, material);
+      m.position.set(x * s, y * s, z * s);
+      m.scale.set(s, s, s);
       m.castShadow = true;
       this.figure.add(m);
       return m;
     };
 
-    // torso: a lathe through shoulder/chest/waist/hip radii, squashed on z
-    const profile = [
-      [0.145, 0.0],   // hip
-      [0.16, 0.1],
-      [0.135, 0.25],  // waist
-      [0.165, 0.38],  // chest
-      [0.15, 0.47],   // shoulder
-      [0.06, 0.5],    // neck root
-    ].map(([r, y]) => new THREE.Vector2(r * g, y));
-    const torso = add(new THREE.LatheGeometry(profile, 28), 0, 0.95, 0);
-    torso.scale.set(s, s, s * 0.72);
-    torso.position.x = 0;
+    // torso: one continuous curve from crotch to neck, elliptical in section
+    const torso = add(lathe([
+      [0.02, 0.775],
+      [0.10, 0.79],
+      [0.150, 0.86],  // hip
+      [0.145, 0.97],
+      [0.122, 1.08],  // waist
+      [0.142, 1.20],  // ribs
+      [0.152, 1.30],  // chest
+      [0.138, 1.38],
+      [0.09, 1.44],   // shoulder slope
+      [0.052, 1.465], // neck root
+      [0.043, 1.55],  // neck top
+    ].map(([r, y]) => [r * g, y]), 48), 0, 0, 0);
+    torso.scale.set(s, s, s * 0.74);
 
-    // hips/seat
-    const seat = add(new THREE.SphereGeometry(0.15 * g, 24, 16), 0, 0.95, 0);
-    seat.scale.set(s, s * 0.6, s * 0.72);
-    seat.position.x = 0;
+    // head: rotated so the texture's u-centre (where the face is) looks at +z;
+    // the scale axes are swapped to match (local x becomes world depth)
+    const head = add(new THREE.SphereGeometry(0.093, 40, 28), 0, 1.65, 0, this._headMaterial());
+    head.scale.set(0.97 * s, 1.15 * s, 0.9 * s);
+    head.rotation.y = -Math.PI / 2;
+    this._head = head;
 
-    add(new THREE.CylinderGeometry(0.045 * g, 0.055 * g, 0.09, 16).scale(1, s, 0.85), 0, 1.47, 0)
-      .position.x = 0;
-    const head = add(new THREE.SphereGeometry(0.1, 24, 18), 0, 1.63, 0);
-    head.scale.set(s * 0.92, s * 1.12, s * 0.98);
-    head.position.x = 0;
-
-    // arms and legs are capsules; radial size follows girth
     for (const side of [-1, 1]) {
-      const arm = add(new THREE.CapsuleGeometry(0.042 * g, 0.5 * s, 6, 14), side * 0.21, 1.12, 0);
-      arm.rotation.z = side * -0.1;
-      add(new THREE.SphereGeometry(0.05 * g * 0.9, 12, 10), side * 0.245, 0.82, 0.01);
-      add(new THREE.CapsuleGeometry(0.06 * g, 0.76 * s, 6, 14), side * 0.09, 0.5, 0);
-      const foot = add(new THREE.BoxGeometry(0.095, 0.06, 0.24), side * 0.09, 0.035 * s, 0.05);
-      foot.geometry = foot.geometry.clone();
-      foot.geometry.translate(0, 0, 0);
+      // deltoid blends the arm into the shoulder line
+      const deltoid = add(new THREE.SphereGeometry(0.058 * gl, 20, 14), side * 0.150 * g, 1.415, 0);
+      deltoid.scale.z = 0.85 * s;
+
+      // arm: shoulder at the lathe origin so the hang angle pivots correctly
+      const arm = add(lathe([
+        [0.001, -0.60],
+        [0.022, -0.585],
+        [0.026, -0.52],  // wrist
+        [0.034, -0.36],  // forearm
+        [0.038, -0.30],  // elbow
+        [0.047, -0.14],
+        [0.052, -0.04],  // upper arm
+        [0.028, 0.0],
+        [0.005, 0.01],
+      ].map(([r, y]) => [r * gl, y]), 24), side * 0.155 * g, 1.42, 0);
+      arm.rotation.z = side * ARM_ANGLE;
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.034 * gl, 14, 10), mat);
+      hand.position.set(0, -0.63, 0.01);
+      hand.scale.set(0.8, 1.35, 0.5);
+      hand.castShadow = true;
+      arm.add(hand);
+
+      // leg: hip at the origin, smooth thigh/knee/calf taper down to the ankle
+      add(lathe([
+        [0.005, 0.01],
+        [0.075, -0.01],
+        [0.092, -0.08],  // thigh
+        [0.075, -0.26],
+        [0.060, -0.35],  // knee
+        [0.066, -0.44],  // calf
+        [0.045, -0.60],
+        [0.030, -0.70],  // ankle
+        [0.001, -0.73],
+      ].map(([r, y]) => [r * gl, y]), 28), side * 0.088 * g, 0.80, 0);
+
+      const foot = add(new THREE.SphereGeometry(0.075, 20, 14), side * 0.088 * g, 0.045, 0.06);
+      foot.scale.set(0.62 * s, 0.4 * s, 1.5 * s);
     }
+  }
+
+  /** Put a face photo on the head (dataUrl = null restores the blank head). */
+  async setFace(dataUrl) {
+    this._faceTex?.dispose();
+    this._faceTex = null;
+    if (dataUrl) this._faceTex = await makeHeadTexture(dataUrl);
+    if (this._head) {
+      this._head.material.dispose();
+      this._head.material = this._headMaterial();
+    }
+  }
+
+  _headMaterial() {
+    return this._faceTex
+      ? new THREE.MeshStandardMaterial({ map: this._faceTex, roughness: 0.55 })
+      : new THREE.MeshStandardMaterial({ color: BODY_COLOR, roughness: 0.5 });
   }
 
   /* ------------------------------ garments ------------------------------ */
@@ -171,10 +226,16 @@ export class ClosetScene {
         group.add(m);
       }
       for (const side of [-1, 1]) {
+        // sit the sleeve a little way down the raised arm, at the same angle
+        const ang = side * ARM_ANGLE;
         const sleeve = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.055 * g, 0.05 * g, 0.2 * s, 14, 1, true), accent);
-        sleeve.position.set(side * 0.21 * g * s, 1.3 * s, 0);
-        sleeve.rotation.z = side * -0.1;
+          new THREE.CylinderGeometry(0.062 * g, 0.055 * g, 0.2 * s, 14, 1, true), accent);
+        sleeve.position.set(
+          (side * 0.155 * g + Math.sin(ang) * 0.14) * s,
+          (1.42 - Math.cos(ang) * 0.14) * s,
+          0,
+        );
+        sleeve.rotation.z = ang;
         group.add(sleeve);
       }
     }
@@ -193,7 +254,7 @@ export class ClosetScene {
         legTex.offset.set(side < 0 ? 0 : 0.5, 0);
         legTex.needsUpdate = true;
         const leg = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.075 * g, 0.062 * g, 0.72 * s, 18, 1, true),
+          new THREE.CylinderGeometry(0.105 * g, 0.064 * g, 0.72 * s, 18, 1, true),
           new THREE.MeshStandardMaterial({ map: legTex, roughness: 0.85 }),
         );
         leg.position.set(side * 0.09 * g * s, 0.51 * s, 0);
@@ -223,6 +284,72 @@ export class ClosetScene {
     this.controls.dispose();
     this.renderer.dispose();
   }
+}
+
+/**
+ * Head texture that wraps like a rendered 3D head: the sharp face spans past
+ * the ears at the texture's u-centre, and the photo's own blurred tones (skin,
+ * hairline) continue around the sides, top and back instead of mannequin grey.
+ * The seam sits at the back of the head, mirror-averaged so it doesn't show.
+ */
+function makeHeadTexture(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 512;
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+
+      // base coat: the photo blurred out to ambient skin/hair color everywhere
+      ctx.fillStyle = '#d8d4cf';
+      ctx.fillRect(0, 0, size, size);
+      const cover = Math.max(size / img.width, size / img.height);
+      ctx.filter = 'blur(40px)';
+      ctx.drawImage(img, (size - img.width * cover) / 2, (size - img.height * cover) / 2,
+        img.width * cover, img.height * cover);
+      ctx.filter = 'none';
+
+      // mirror-average so the left/right texture edges match at the seam
+      const mirror = document.createElement('canvas');
+      mirror.width = mirror.height = size;
+      const mx = mirror.getContext('2d');
+      mx.translate(size, 0);
+      mx.scale(-1, 1);
+      mx.drawImage(c, 0, 0);
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(mirror, 0, 0);
+      ctx.globalAlpha = 1;
+
+      // sharp face: wraps ~210° of the head, fading softly into the base coat
+      const cx = size / 2, cy = size * 0.47;
+      const fw = 300, fh = 340;
+      const patch = document.createElement('canvas');
+      patch.width = patch.height = size;
+      const px = patch.getContext('2d');
+      const fit = Math.max(fw / img.width, fh / img.height) * 1.05;
+      px.drawImage(img, cx - (img.width * fit) / 2, cy - (img.height * fit) / 2,
+        img.width * fit, img.height * fit);
+      px.globalCompositeOperation = 'destination-in';
+      px.save();
+      px.translate(cx, cy);
+      px.scale(fw / fh, 1);
+      const grad = px.createRadialGradient(0, 0, fh * 0.30, 0, 0, fh * 0.52);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      px.fillStyle = grad;
+      px.fillRect(-size * 2, -size * 2, size * 4, size * 4);
+      px.restore();
+
+      ctx.drawImage(patch, 0, 0);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      resolve(tex);
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
 }
 
 /** Average color of a small resample of the image - used for sleeves, soles. */
